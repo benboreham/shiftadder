@@ -1,0 +1,104 @@
+#Google apps script to add my shifts to my calendar using https://script.google.com/ 
+#Heres an example of the data this reads
+
+#Date,3/07/2023,4/07/2023,5/07/2023,6/07/2023,7/07/2023
+#Day,M,T,W,T,F
+#AM Shift,Bob,Joe,Ben,Joe,Jim
+#PM Shift,Jim,Monash,Bob,Monash,Ben
+#,Week 29,,,,
+#Date,10/07/2023,11/07/2023,12/07/2023,13/07/2023,14/07/2023
+#Day,M,T,W,T,F
+#AM Shift,Monash,Joe,Joe,Bob,Ben
+#PM Shift,Bob,Ben,Jim,Monash,Jim
+#,Week 30,,,,
+#Date,17/07/2023,18/07/2023,19/07/2023,20/07/2023,21/07/2023
+#Day,M,T,W,T,F
+#AM Shift,Joe,Ben,Joe,Monash,Jim
+#PM Shift,Bob,Jim,Bob,Ben,Monash
+#,Week 31,,,,
+
+#Start of the script
+
+
+function GetAllSheetNames() { //This checks the tabs on the original spreadsheet and prevents you from accidently running the other scripts.
+var out = new Array()
+var sheets = SpreadsheetApp.openById("ID_GOES_HERE_replace_WITH YOUR_SHEETS_ID").getSheets(); 
+//var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+for (var i=0 ; i<sheets.length ; i++) out.push( [ sheets[i].getName() ] )
+Logger.log(out)
+return out 
+}
+
+
+function CreateCalendarEntries(){
+  var calId = "ID_GOES_HERE_replace_WITH YOUR_CALENDARS_ID@group.calendar.google.com"; //Shifts Calendar
+  var cal = CalendarApp.getCalendarById(calId);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  //var InstitutionName = sheet.getRange("C1").getValue();
+  var InstitutionName = "Institution"
+  for(var coulmn = 0; coulmn <= 6; coulmn = coulmn + 1){
+    for(var i = 3; i<data.length;i++){
+      if(data[i][coulmn] == InstitutionName){ //[1] because column B     
+        if(data[i-3][coulmn] == ""){
+          var tstart = data[i-2][coulmn].toString().replace("00:00:00", "09:00")
+          var tstop = data[i-2][coulmn].toString().replace("00:00:00", "13:30")
+      }else{
+            var tstart = data[i-3][coulmn].toString().replace("00:00:00", "13:30")
+            var tstop = data[i-3][coulmn].toString().replace("00:00:00", "18:00")
+      }
+      //Cleanup the time/dates so theyre easier to work with
+       var tstart = tstart.replace("GMT+1100 (Australian Eastern Daylight Time)", "")  //Daylight savings
+       var tstop = tstop.replace("GMT+1100 (Australian Eastern Daylight Time)", "") //Daylight savings
+       var tstart = tstart.replace("GMT+1000 (Australian Eastern Standard Time)", "")
+       var tstop = tstop.replace("GMT+1000 (Australian Eastern Standard Time)", "") 
+       var tstop = tstop.match(".{6}$")
+       var tstop = tstop[0]
+          Logger.log("Checking if we should sleep - is " + i + " is divisible by 5... " + i % 5) //Sleep every 5 runs
+          if (i % 5 == 0) { Utilities.sleep(5000); } //To stop us from getting rate limited when creating calendar events
+          calDesc = " Institution shift " + tstart + " to " + tstop
+          Logger.log(calDesc) //Print to description to console so we can see if something messed up
+          //var event = CalendarApp.getDefaultCalendar().createEventFromDescription(calDesc); //If you just want to add the event to your calendar instead of a shared one
+          var event = CalendarApp.getCalendarById(calId).createEventFromDescription(calDesc);
+          Logger.log('Event ID: ' + event.getId()); //Print the event ID of the created calendar event incase we need to delete it
+          Logger.log("Event details: " + event.getStartTime());
+          Utilities.sleep(1000); //Failsafe
+      }
+    } 
+  }
+}
+
+
+function DeleteAllEvents(){
+  var calId = "ID_GOES_HERE_replace_WITH YOUR_CALENDARS_ID@group.calendar.google.com"; //Institution DHD Shifts Calendar
+  Logger.log("About to delete all events, Press STOP at the top of the screen if this isn't what you wanted");
+  Utilities.sleep(6000); //Failsafe
+  var cal = CalendarApp.getCalendarById(calId);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  //var InstitutionName = sheet.getRange("C1").getValue();
+  var InstitutionName = "Institution"
+  var events = cal.getEvents(new Date('January 1, 2000'), new Date(864000000000000)); // Get all events in the calendar until the year 29349
+
+  // Loop through all events
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i];
+    var eventId = event.getId();
+    var eventSummary = event.getSummary();
+    var eventStart = event.getStartTime();
+    var eventEnd = event.getEndTime();
+    Logger.log('About to delete event ' + eventSummary + ' ID: (' + eventId + ')');
+
+    // Delete the event
+    try {
+      event.deleteEvent();
+      Logger.log('Success.');
+      Utilities.sleep(1200); //Failsafe
+    } catch (e) {
+      Logger.log(e);
+      Logger.log('Event delete failed.');
+    }
+  }
+}
+
+
